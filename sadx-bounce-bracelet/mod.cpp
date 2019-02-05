@@ -5,43 +5,9 @@
 
 FunctionPointer(int, _rand, (void), 0x006443BF);
 
-static int   ring_timer = 0;
-static int   super_count = 0; // Dirty hack for multitap mod compatibility
-static short last_level = 0;
-static short last_act = 0;
-static int   level_song = 0;
-static Uint8 last_action[8] = {};
-
-static const int clips[] = {
-	402,
-	508,
-	874,
-	1427,
-	1461
-};
-
-static void __cdecl BounceBracelet_Main(ObjectMaster* _this)
-{
-
-	// HACK: Result screen disables P1 control. There's probably a nicer way to do this, we just need to find it.
-	if (IsControllerEnabled(0))
-	{
-		++ring_timer %= 60;
-
-		if (!ring_timer)
-		{
-			AddRings(-1);
-		}
-	}
-}
-
-static void BounceBracelet_Bounce()
-{
-	PhysicsArray->AirAccel = 500;
-	PhysicsArray->JumpSpeed = 500;
-}
-
 static const PVMEntry BounceBraceletPVM = { const_cast<char*>("BounceBracelet"), &SONIC_TEXLIST };
+static bool bouncing = false;
+static int bounceCount = 0;
 
 extern "C"
 {
@@ -67,25 +33,53 @@ extern "C"
 
 	void EXPORT OnFrame()
 	{
+		if (GameState != 15 || MetalSonicFlag)
+		{
+			bouncing = false;
+			return;
+		}
 
 		for (int i = 0; i < 8; i++)
 		{
 			EntityData1* data1 = EntityData1Ptrs[i];
 			CharObj2* data2 = CharObj2Ptrs[i];
-
+			
 			if (data1 == nullptr || data1->CharID != Characters_Sonic)
 			{
 				continue;
 			}
+			bool toggle = (ControllerPointers[i]->PressedButtons & Buttons_B) != 0;
+			bool action = data1->Action == 12;
 
-			bool toggle = (ControllerPointers[i]->PressedButtons & ButtonBits_Y) != 0;
-			//bool action = !is_super ? (last_action[i] == 8 && data1->Action == 12) : (last_action[i] == 82 && data1->Action == 78);
+			if (bouncing) {
+				if (data2->Speed.y == 0) {
+					if (bounceCount > 2) {
+						bounceCount = 2;
+					}
 
-			if (toggle /*&& action*/)
-			{
-				BounceBracelet_Bounce();
+					data2->Speed.y = (3 + ((bounceCount - 1)));
+
+					bouncing = false;
+				}
 			}
-			
+			else if (toggle && action)
+			{
+				NJS_VECTOR newSpeed = NJS_VECTOR();
+				newSpeed.x = data2->Speed.x;
+				newSpeed.y = -2.5;
+				newSpeed.z = data2->Speed.z;
+
+				bouncing = true;
+				bounceCount += 1;
+
+				Sonic_ChargeSpindash(data2, data1);
+				Sonic_ReleaseSpindash(data1, data2);
+
+				data2->Speed = newSpeed;
+			}
+			else if (data2->Speed.y == 0) {
+				bounceCount = 0;
+			}
 		}
 
 	}
